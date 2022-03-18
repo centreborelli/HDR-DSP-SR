@@ -13,3 +13,4 @@ Modern Earth observation satellites capture multi-exposure bursts of push-frame 
 
 ### Data
 
+![Architecture](HDR-DSP-teaser.jpg)
