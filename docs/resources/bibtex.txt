@@ -1,0 +1,6 @@
+@inproceedings{Nguyen_2022_CVPR,
+  title={Self-Supervised Super-Resolution for Multi-Exposure Push-Frame Satellites},
+  author    = {Nguyen, Ngoc Long and Anger, Jeremy and Davy, Axel and Arias, Pablo and Facciolo, Gabriele},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2022}
+}
