@@ -20,7 +20,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torch.nn.functional as F
 
-from models import EncoderNet, DecoderNet, FNet#, AddDecoderNet
+from models import EncoderNet, DecoderNet, FNet
 from shiftandadd import shiftAndAdd, featureAdd, featureWeight
 
 from warpingOperator import WarpedLoss, TVL1, base_detail_decomp, GaussianLayer, BlurLayer
@@ -29,7 +29,6 @@ import os
 from torch.autograd import Variable
 
 
-from lanczos import *
 
 
 
@@ -136,51 +135,6 @@ def DeepSaaSuperresolve_weighted_base(samplesLR, flow, base, Encoder, Decoder, d
     return SR
 
 
-def DeepSaaSuperresolve_weighted(samplesLR, flow, Encoder, Decoder, device, feature_mode, num_features = 64, sr_ratio=2, phase = 'training'):
-    """
-    samplesLR: b, num_im, h, w
-    flow: b*(num_im-1), 2, h, w
-    """
-    nb_mode = len(feature_mode)
-
-
-    if phase == 'training':        
-        samplesLR = samplesLR[:,1:,...].contiguous() #b, (num_im-1), h, w
-        flow = flow[:,1:].contiguous()#.view(-1, 1, 2, h, w)
-    b, num_im, h, w = samplesLR.shape
-
-
-    samplesLR = samplesLR.view(-1,1,h,w)
-
-    
-    inputEncoder = samplesLR
-    features = Encoder(inputEncoder) #b * (num_im-1), num_features, h, w
-    features = features.view(-1, h, w) # b * num_im-1 *num_features, h, w
-
-    dacc = featureWeight(flow.view(-1,2,h,w),sr_ratio=sr_ratio, device = device)
-    flow = flow.contiguous().view(-1, 1, 2, h, w).repeat(1,num_features,1,1,1).view(-1,2, h, w) #b * num_im-1 * num_features, 2, h, w
-    dadd = featureAdd(features, flow, sr_ratio=sr_ratio, device = device) #b * num_im * num_features, 2h, 2w
-
-    dadd = dadd.view(b, num_im, num_features, sr_ratio*h, sr_ratio*w)
-    dacc = dacc.view(b, num_im, 1, sr_ratio*h, sr_ratio*w)
-
-    SR = torch.empty(b, 1+nb_mode*num_features, sr_ratio*h, sr_ratio*w)
-    for i in range(nb_mode):
-        if feature_mode[i] == 'Max':
-            SR[:, i*num_features:(i+1)*num_features], _ = torch.max(dadd, dim = 1, keepdim = False)
-        elif feature_mode[i] == 'Std':
-            SR[:, i*num_features:(i+1)*num_features] = torch.std(dadd, dim = 1, keepdim = False)
-        elif feature_mode[i] == 'Avg':
-            #dadd = torch.sum(dadd, 1) #b, num_features, sr_ratioh, sr_ratiow
-            dacc = torch.sum(dacc, 1)
-            dacc[dacc == 0] = 1
-            SR[:, i*num_features:(i+1)*num_features] = torch.sum(dadd, 1)/dacc
-            SR[:, -1:] = dacc/15.
-    SR = Decoder(SR.to(device)) #b, 1, sr_ration*h, sr_ratio*w
-    #SR = torch.squeeze(SR, 1)
-
-    return SR
-
 
 
 class SkySatRealDataset_ME(Dataset):
@@ -256,7 +210,7 @@ def BicubicWarping(x, flo, device, ds_factor = 2):
         return output
 
 
-def trainESA(args):  
+def train(args):  
     criterion = nn.L1Loss()
     seed_everything()    
     train_bs, val_bs, lr_fnet, factor_fnet, patience_fnet, lr_decoder, factor_decoder, patience_decoder, lr_encoder, factor_encoder, patience_encoder, num_epochs, warp_weight, TVflow_weight= args.train_bs, args.val_bs, args.lr_fnet, args.factor_fnet, args.patience_fnet,  args.lr_decoder, args.factor_decoder, args.patience_decoder, args.lr_encoder, args.factor_encoder, args.patience_encoder, args.num_epochs, args.warp_weight, args.TVflow_weight
@@ -647,7 +601,7 @@ def main(args):
     """
     torch.cuda.empty_cache()
     #resume_training(args)
-    trainESA(args)
+    train(args)
     #valid(args)
     #finetune_mire(args)
     #check(args)
