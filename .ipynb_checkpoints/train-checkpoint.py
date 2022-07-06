@@ -5,6 +5,7 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import json
 import argparse
 #import iio
 from tqdm import tqdm
@@ -28,7 +29,10 @@ import iio
 import os
 from torch.autograd import Variable
 
+from registration import generate_data_disk
 
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from lanczos import *
 
 
@@ -320,7 +324,8 @@ def trainESA(args):
                                            num_workers=1, shuffle=False)
     checkpoint_dir = 'TrainHistory/{}'.format(folder_name)
     safe_mkdir(checkpoint_dir)
-
+    with open(checkpoint_dir + '/args.txt', 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
     ##################
     starttime = time()
     best_score = 100 #val_score
