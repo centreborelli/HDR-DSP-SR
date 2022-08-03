@@ -28,6 +28,7 @@ import iio
 import os
 from torch.autograd import Variable
 
+from torchvision.transforms import GaussianBlur
 
 
 
@@ -55,27 +56,21 @@ def flowEstimation(samplesLR, ME, device, gaussian_filter , warping, sr_ratio = 
     samplesLR: Tensor b, num_im, h, w
     ME: Motion Estimator
     """
-    #samplesLR = padding(samplesLR)
 
     b, num_im, h, w = samplesLR.shape
 
-    samplesLRblur = gaussian_filter(samplesLR.view(-1,1,h,w))
-    samplesLRblur = samplesLRblur.view(b, num_im, h, w)
+    samplesLRblur = gaussian_filter(samplesLR)
 
-    #b, num_im, h, w = samplesLRblur.shape
 
     samplesLR_0 = samplesLRblur[:,:1,...] #b, 1, h, w
-    #if phase == 'training':
-    #    samplesLRblur = samplesLRblur[:,1:,...]
 
-    b, num_im, h, w = samplesLR.shape
 
     samplesLR_0 = samplesLR_0.repeat(1, num_im, 1,1)  #b, num_im, h, w
     samplesLR_0 = samplesLR_0.reshape(-1, h, w)
     samplesLRblur = samplesLRblur.reshape(-1, h, w)  #b*num_im, h, w
     concat = torch.cat((samplesLRblur.unsqueeze(1), samplesLR_0.unsqueeze(1)), axis = 1) #b*(num_im), 2, h, w 
     flow = ME(concat.to(device)) #b*(num_im), 2, h, w 
-    #if phase == 'validation':
+
     flow[::num_im] = 0
 
     warploss, _ = warping(samplesLRblur.unsqueeze(1).to(device),samplesLR_0.unsqueeze(1).to(device), flow, losstype = 'Detail')
@@ -128,7 +123,7 @@ def DeepSaaSuperresolve_weighted_base(samplesLR, flow, base, Encoder, Decoder, d
             dacc = torch.sum(dacc, 1)
             dacc[dacc == 0] = 1
             SR[:, i*num_features:(i+1)*num_features] = torch.sum(dadd, 1)/dacc
-            SR[:, -1:] = dacc/15.
+            SR[:, -1:] = dacc/15. #normalization/nb of frames
     SR = Decoder(SR.to(device)) #b, 1, sr_ration*h, sr_ratio*w
     #SR = torch.squeeze(SR, 1)
 
@@ -182,7 +177,7 @@ class SkySatRealDataset_ME(Dataset):
 
 def BicubicWarping(x, flo, device, ds_factor = 2):
     """
-    warp an image/tensor (im2) back to im1, according to the optical flow
+    warp and downsample an image/tensor (im2) back to im1, according to the optical flow
     x: [B, C, H, W] (im2)
     flo: [B, 2, H, W] flow
     """
@@ -221,7 +216,6 @@ def train(args):
     nb_mode = len(feature_mode)
     print(feature_mode)
     ##################
-    #folder_name = 'Test'
     folder_name = 'Real_{}_N2N_FNet_ME_deconv_DetaAtte_W_JS_V_noisy_valvar_time_{}'.format(feature_mode,
         f"{datetime.datetime.now():%m-%d-%H-%M-%S}")
 
@@ -254,7 +248,7 @@ def train(args):
 
     blur_filter_SR = BlurLayer().to(device)
 
-    gaussian_filter = GaussianLayer(sigma=1).to(device)
+    gaussian_filter = GaussianBlur(11, sigma=1).to(device)
 
     TVLoss = TVL1(TVLoss_weight=1)
     warping = WarpedLoss(interpolation = 'bicubicTorch') 
@@ -309,7 +303,6 @@ def train(args):
             optimizerEncoder.zero_grad()
 
             idx = random.sample(range(n), num_images)
-            #good_image = random.sample(list(torch.where(expotime>1)[0]),1)[0]
             
             samplesLR = samplesLR[:, idx].float().to(device)
   
@@ -321,7 +314,7 @@ def train(args):
             base, detail = base_detail_decomp(samplesLR, gaussian_filter) #b, 1, h, w 
             
             #######Flow
-            flow, trainwarploss = flowEstimation(samplesLR*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im-1), 2, h, w
+            flow, trainwarploss = flowEstimation(samplesLR*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im), 2, h, w
             
             c = 5
             traintvloss = TVLoss(flow[...,c:-c,c:-c])
@@ -383,7 +376,6 @@ def train(args):
                     ValWarpLoss.append(valwarploss.data.item())
                     ValTVLoss.append(valtvloss.data.item())
 
-                    #flow = shift[...,None, None].repeat(1,1,1,h,w)
 
                     base, detail = base_detail_decomp(samplesLR, gaussian_filter) 
                     SR = DeepSaaSuperresolve_weighted_base(detail, flow=flow, base = samplesLR, Encoder=Encoder, Decoder=Decoder,
@@ -431,162 +423,32 @@ def train(args):
     return 
 
 
-def zoombase(LR_base, flow, device, warping, mean = 'geo'):
+def zoombase(LR_base, flow, device, warping):
     b, num_im, h, w = LR_base.shape
-    if mean == 'geo':
-        LR_base = LR_base.view(-1,1,h,w)
-        LR_base = warping.warp(LR_base, -flow.view(-1,2,h,w))
-        LR_base = LR_base.view(b,num_im, h, w)
-        LR_base = torch.log(LR_base)
-        LR_base = torch.mean(LR_base, 1, keepdim = True)
-        LR_base = torch.exp(LR_base)
-    elif mean == 'ari':
-        LR_base = LR_base.view(-1,1,h,w)
-        LR_base = warping.warp(LR_base, -flow.view(-1,2,h,w))
-        LR_base = LR_base.view(b,num_im, h, w)
-        LR_base = torch.mean(LR_base, 1, keepdim = True)
-    else:
-        LR_base = LR_base[:,:1]
+
+    LR_base = LR_base.view(-1,1,h,w)
+    LR_base = warping.warp(LR_base, -flow.view(-1,2,h,w))
+    LR_base = LR_base.view(b,num_im, h, w)
+    LR_base = torch.mean(LR_base, 1, keepdim = True)
+
     SR_base = torch.nn.functional.interpolate(LR_base, size = [2*h-1, 2*w-1], mode = 'bilinear', align_corners = True)
     SR_base = torch.cat((SR_base, torch.zeros(b,1,1,2*w-1).to(device)), dim = 2)
     SR_base = torch.cat((SR_base, torch.zeros(b,1,2*h,1).to(device)), dim = 3)
     return SR_base
 
-def zoombase_weighted(LR_base, expotime, flow, device, warping, mean = 'ari'):
+def zoombase_weighted(LR_base, expotime, flow, device, warping):
     b, num_im, h, w = LR_base.shape
-    if mean == 'geo':
-        LR_base = LR_base.view(-1,1,h,w)
-        LR_base = warping.warp(LR_base, -flow.view(-1,2,h,w))
-        LR_base = LR_base.view(b,num_im, h, w)
-        LR_base = torch.log(LR_base)
-        LR_base = torch.mean(LR_base, 1, keepdim = True)
-        LR_base = torch.exp(LR_base)
-    elif mean == 'ari':
-        LR_base = LR_base.view(-1,1,h,w)
-        LR_base = warping.warp(LR_base, -flow.view(-1,2,h,w))
-        LR_base = LR_base.view(b,num_im, h, w)
-        LR_base = torch.mean(LR_base*expotime, 1, keepdim = True)/torch.mean(expotime, 1, keepdim = True)
-    else:
-        LR_base = LR_base[:,:1]
+
+    LR_base = LR_base.view(-1,1,h,w)
+    LR_base = warping.warp(LR_base, -flow.view(-1,2,h,w))
+    LR_base = LR_base.view(b,num_im, h, w)
+    LR_base = torch.mean(LR_base*expotime, 1, keepdim = True)/torch.mean(expotime, 1, keepdim = True)
+
     SR_base = torch.nn.functional.interpolate(LR_base, size = [2*h-1, 2*w-1], mode = 'bilinear', align_corners = True)
     SR_base = torch.cat((SR_base, torch.zeros(b,1,1,2*w-1).to(device)), dim = 2)
     SR_base = torch.cat((SR_base, torch.zeros(b,1,2*h,1).to(device)), dim = 3)
     return SR_base
 
-def valid(args):
-    seed_everything()
-    train_bs, val_bs, lr_fnet, factor_fnet, patience_fnet, lr_decoder, factor_decoder, patience_decoder, lr_encoder, factor_encoder, patience_encoder, num_epochs, warp_weight, TVflow_weight= args.train_bs, args.val_bs, args.lr_fnet, args.factor_fnet, args.patience_fnet,  args.lr_decoder, args.factor_decoder, args.patience_decoder, args.lr_encoder, args.factor_encoder, args.patience_encoder, args.num_epochs, args.warp_weight, args.TVflow_weight
-    num_features, num_blocks = args.num_features, args.num_blocks
-    sigma = args.sigma
-    sr_ratio = args.sr_ratio
-    feature_mode = ['Avg', 'Max', 'Std']
-
-    nb_mode = len(feature_mode)
-    print(feature_mode)    
-    
-    ##################
-    folder_name = "Real_woBD_['Avg', 'Max', 'Std']_N2N_FNet_ME_deconv_DetaAtte2_W_JS_V_noisy_valvar_time_11-13-15-08-44"#"Real_['Avg', 'Max', 'Std']_N2N_FNet_ME_deconv_DetaAtte2_W_JS_V_noisy_valvar_time_11-03-09-54-35"#"Real_['Avg', 'Max', 'Std']_N2N_FNet_ME_DetaAtte2_W_JS_V_noisy_valvar_time_11-02-17-10-00"
-    ################## load Models 
-    checkpoint_path = 'TrainHistory/{}/checkpoint_1700.pth.tar'.format(folder_name)
-    checkpoint = torch.load(checkpoint_path)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    Decoder = DecoderNet(in_dim=1+(nb_mode)*num_features).float().to(device)
-
-    Decoder.load_state_dict(checkpoint['state_dictDecoder'])
-
-    Encoder = EncoderNet(in_dim=1,conv_dim=64, out_dim=num_features, num_blocks=num_blocks).float().to(device)
-    Encoder.load_state_dict(checkpoint['state_dictEncoder'])
-
-    Fnet = FNet().float().to(device)
-    Fnet.load_state_dict(checkpoint['state_dictFnet']) 
-    print(checkpoint['epoch'])
-    
-    TVLoss = TVL1(TVLoss_weight=1)
-    gaussian_filter = GaussianLayer(sigma=1).to(device)
-    warping = WarpedLoss(interpolation = 'bicubicTorch') 
-    ##################
-
-
-    #Test loader
-    
-    Dataset_path = 'SkySat_ME_noSaturation/'
-    test_loader = {}
-    
-    for i in range(6,16):
-        transformedDataset = SkySatRealDataset_ME(Dataset_path, augmentation = False, phase = 'test', num_images = i)
-        test_loader[str(i)] = torch.utils.data.DataLoader(transformedDataset, batch_size=val_bs, 
-                                           num_workers=1, shuffle=False)
-
-    ##################
-    starttime = time()
-    ##################
-
-    Fnet.eval()
-    Decoder.eval()
-    Encoder.eval()
-
-    with torch.no_grad():
-        for n in range(4,16):
-            image_folder_base = os.path.join('TestME/Real/', folder_name, 'SRbase', str(n))
-            safe_mkdir(image_folder_base)
-            image_folder_detail = os.path.join('TestME/Real/', folder_name, 'SRdetail', str(n))
-            safe_mkdir(image_folder_detail)
-            image_folder = os.path.join('TestME/Real/', folder_name, 'SR', str(n))
-            safe_mkdir(image_folder)
-            #image_LR = 'TestME/Real/LR_ref/'+ str(n)
-            #safe_mkdir(image_LR)
-            for k, (samplesLR, expotime) in enumerate(test_loader[str(n)]):
-                """
-                samplesLR, samplesLRblur : b, num_im, h, w
-                samplesHR: b, 2h, 2w
-                """
-                
-                idx = list(range(n))
-                idx.remove(n//2)
-                idx.insert(0, n//2)
-                samplesLR = samplesLR[:,idx].float().to(device)
-
-                b, num_im, h, w = samplesLR.shape
-                expotime = expotime[:,idx].float().to(device)
-
-                #######Flow
-                samplesLR = samplesLR/expotime
-                
-                flow, _ = flowEstimation(samplesLR*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im-1), 2, h, w
-
-
-                base, detail = base_detail_decomp(samplesLR, gaussian_filter) 
-                
-                SR_detail = DeepSaaSuperresolve_weighted(samplesLR, flow=flow, Encoder=Encoder, Decoder=Decoder,
-                                     device = device, feature_mode= feature_mode, num_features = num_features, sr_ratio=sr_ratio, phase = 'validation')
-                
-
-                SR_baseAri = zoombase(base, flow, device, warping, mean = 'ari')
-
-                SR_Ari = SR_detail # + SR_baseAri
-
-                c = 10
-                SR_baseAri = torch.squeeze(SR_baseAri).detach().cpu().numpy()[c:-c,c:-c]
-                SR_detail = torch.squeeze(SR_detail).detach().cpu().numpy()[c:-c,c:-c]
-
-                SR_Ari = torch.squeeze(SR_Ari).detach().cpu().numpy()[c:-c,c:-c]
-                LR = torch.squeeze(samplesLR,0).detach().cpu().numpy()[0,c//2:-c//2,c//2:-c//2]
-                LR_base = torch.squeeze(base,0).detach().cpu().numpy()[0,c//2:-c//2,c//2:-c//2]
-                #LR_normalized = torch.squeeze(samplesLR/expotime,0).detach().cpu().numpy()[:,c//2:-c//2,c//2:-c//2]
-
-                SR_Ari = SR_Ari/np.median(SR_Ari)*np.median(LR)
-                SR_baseAri = SR_baseAri/np.median(SR_baseAri)*np.median(LR_base)
-
-                
-                #iio.write(os.path.join(image_folder_base, 'SR_base_{:03d}.tif'.format(k)), SR_baseAri)
-                #iio.write(os.path.join(image_folder_detail, 'SR_detail_{:03d}.tif'.format(k)), SR_detail)
-
-                iio.write(os.path.join(image_folder, 'SR_{:03d}.tif'.format(k)), SR_Ari)
-                #iio.write(os.path.join(image_LR, 'LR_{:03d}.tif'.format(k)), LR)
-
-
-    return
-                
 
 def check(args):
     feature_mode = args.feature_mode
@@ -600,11 +462,8 @@ def main(args):
         config: dict, configuration file
     """
     torch.cuda.empty_cache()
-    #resume_training(args)
     train(args)
-    #valid(args)
-    #finetune_mire(args)
-    #check(args)
+
     
 if __name__ == '__main__':
 
