@@ -228,7 +228,7 @@ def train(args):
 
 
     ################## load Models 
-    checkpoint_path = '/mnt/ddisk/nguyen/cnn-sr/TrainHistory/FNet_Real_woSat/time_11-02-16-35-29/checkpoint_1600.pth.tar'
+    checkpoint_path = 'pretrained_Fnet.pth.tar'
     checkpoint = torch.load(checkpoint_path)
     print(torch.cuda.is_available())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -260,11 +260,11 @@ def train(args):
     warping = WarpedLoss(interpolation = 'bicubicTorch') 
     ##################
     
-    Dataset_path = '/mnt/ddisk/nguyen/cnn-sr/datareal_ME_woSat/'
+    Dataset_path = 'SkySat_ME_noSaturation/'
     train_loader = {}
     val_loader = {}
     
-    for i in range(4,16):
+    for i in range(5,16):
         transformedDataset = SkySatRealDataset_ME(Dataset_path, augmentation = True, phase = 'train', num_images = i)
         train_loader[str(i)] = torch.utils.data.DataLoader(transformedDataset, batch_size=train_bs, 
                                            num_workers=4, shuffle=True)       
@@ -509,10 +509,10 @@ def valid(args):
 
     #Test loader
     
-    Dataset_path = '/mnt/ddisk/nguyen/cnn-sr/datareal_ME_woSat/'
+    Dataset_path = 'SkySat_ME_noSaturation/'
     test_loader = {}
     
-    for i in range(4,16):
+    for i in range(6,16):
         transformedDataset = SkySatRealDataset_ME(Dataset_path, augmentation = False, phase = 'test', num_images = i)
         test_loader[str(i)] = torch.utils.data.DataLoader(transformedDataset, batch_size=val_bs, 
                                            num_workers=1, shuffle=False)
