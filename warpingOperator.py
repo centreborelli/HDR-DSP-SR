@@ -6,8 +6,9 @@ import numpy as np
 import scipy
 from scipy.ndimage.morphology import binary_dilation
 from torch.autograd import Variable
-import iio
+#import iio
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def base_detail_decomp(samples, gaussian_filter):
     #samplesLR: b, num_im, h, w
     b, num_im, h, w = samples.shape
@@ -56,7 +57,7 @@ class GaussianLayer(nn.Module):
             f.data.copy_(torch.from_numpy(k))
             f.required_grad = False
 
-Gaussian_Filter = GaussianLayer(sigma=1).to('cuda')
+Gaussian_Filter = GaussianLayer(sigma=1).to(device)
 
 class TVL1(nn.Module):
     def __init__(self,TVLoss_weight=1):
@@ -112,9 +113,9 @@ class WarpedLoss(nn.Module):
             xx = xx.view(1, 1, H, W).repeat(B, 1, 1, 1)
             yy = yy.view(1, 1, H, W).repeat(B, 1, 1, 1)
             grid = torch.cat((xx, yy), 1).float()
-            grid = grid.cuda()
+            grid = grid.to(device)
             #print(grid.shape)
-            vgrid = Variable(grid) + flo.cuda()
+            vgrid = Variable(grid) + flo.to(device)
 
             if self.interpolation == 'bilinear':
                 # scale grid to [-1,1] 
