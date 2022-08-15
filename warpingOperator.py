@@ -30,7 +30,7 @@ class BlurLayer(nn.Module):
         return self.seq(x)
 
     def weights_init(self):
-        k = iio.read('blur_kernel.tiff').squeeze()
+        k = np.load('blur_kernel.npy').squeeze()
         size = k.shape[0]
         for name, f in self.named_parameters():
             f.data.copy_(torch.from_numpy(k))
