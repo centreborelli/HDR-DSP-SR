@@ -17,7 +17,7 @@ import torch.nn.functional as F
 from models import EncoderNet, DecoderNet, FNet
 from shiftandadd import shiftAndAdd, featureAdd, featureWeight
 
-from warpingOperator import WarpedLoss, TVL1, base_detail_decomp, GaussianLayer, BlurLayer
+from warpingOperator import WarpedLoss, TVL1, base_detail_decomp, BlurLayer
 import os
 from torch.autograd import Variable
 from torchvision.transforms import GaussianBlur

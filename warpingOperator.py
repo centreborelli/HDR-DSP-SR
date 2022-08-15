@@ -6,13 +6,13 @@ import numpy as np
 import scipy
 from scipy.ndimage.morphology import binary_dilation
 from torch.autograd import Variable
-#import iio
+from torchvision.transforms import GaussianBlur
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def base_detail_decomp(samples, gaussian_filter):
     #samplesLR: b, num_im, h, w
     b, num_im, h, w = samples.shape
-    base   = gaussian_filter(samples.view(-1,1,h,w)).view(*samples.shape)
+    base   = gaussian_filter(samples)
     detail = samples - base
     return base, detail #b, num_im, h, w
 
@@ -57,7 +57,7 @@ class GaussianLayer(nn.Module):
             f.data.copy_(torch.from_numpy(k))
             f.required_grad = False
 
-Gaussian_Filter = GaussianLayer(sigma=1).to(device)
+Gaussian_Filter = GaussianBlur(11, sigma=1).to(device)
 
 class TVL1(nn.Module):
     def __init__(self,TVLoss_weight=1):

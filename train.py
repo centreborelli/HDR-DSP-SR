@@ -309,9 +309,9 @@ def train(args):
             b, num_im, h, w = samplesLR.shape
             
             expotime = expotime[:, idx].float().to(device)
-            samplesLR = samplesLR/expotime
+            #samplesLR = samplesLR/expotime
         
-            base, detail = base_detail_decomp(samplesLR, gaussian_filter) #b, 1, h, w 
+            base, detail = base_detail_decomp(samplesLR/expotime, gaussian_filter) #b, 1, h, w 
             
             #######Flow
             flow, trainwarploss = flowEstimation(samplesLR*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im), 2, h, w
@@ -366,7 +366,7 @@ def train(args):
                     b, num_im, h, w = samplesLR.shape
                     expotime = expotime.float().to(device)
 
-                    samplesLR = samplesLR/expotime
+                    #samplesLR = samplesLR/expotime
                     #######Flow
                     flow, valwarploss = flowEstimation(samplesLR*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im-1), 2, h, w
 
@@ -377,7 +377,7 @@ def train(args):
                     ValTVLoss.append(valtvloss.data.item())
 
 
-                    base, detail = base_detail_decomp(samplesLR, gaussian_filter) 
+                    base, detail = base_detail_decomp(samplesLR/expotime, gaussian_filter) 
                     SR = DeepSaaSuperresolve_weighted_base(detail, flow=flow, base = samplesLR, Encoder=Encoder, Decoder=Decoder,
                                          device = device, feature_mode= feature_mode, num_features = num_features, sr_ratio=sr_ratio, phase = 'validation')
 
