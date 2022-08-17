@@ -23,7 +23,7 @@ import torch.nn.functional as F
 from models import EncoderNet, DecoderNet, FNet
 from shiftandadd import shiftAndAdd, featureAdd, featureWeight
 
-from warpingOperator import WarpedLoss, TVL1, base_detail_decomp, GaussianLayer, BlurLayer
+from warpingOperator import WarpedLoss, TVL1, base_detail_decomp, BlurLayer
 import iio
 import os
 from torch.autograd import Variable
@@ -207,14 +207,15 @@ def BicubicWarping(x, flo, device, ds_factor = 2):
 
 def train(args):  
     criterion = nn.L1Loss()
-    seed_everything()    
+    seed_everything()    #Fix the seed for reproducibility
+    #Load the parameters
     train_bs, val_bs, lr_fnet, factor_fnet, patience_fnet, lr_decoder, factor_decoder, patience_decoder, lr_encoder, factor_encoder, patience_encoder, num_epochs, warp_weight, TVflow_weight= args.train_bs, args.val_bs, args.lr_fnet, args.factor_fnet, args.patience_fnet,  args.lr_decoder, args.factor_decoder, args.patience_decoder, args.lr_encoder, args.factor_encoder, args.patience_encoder, args.num_epochs, args.warp_weight, args.TVflow_weight
     num_features, num_blocks = args.num_features, args.num_blocks
     sigma = args.sigma
     sr_ratio = args.sr_ratio
     feature_mode = args.feature_mode
     nb_mode = len(feature_mode)
-    print(feature_mode)
+    print(feature_mode) #Avg, Max, Std poolings in the DSP module
     ##################
     folder_name = 'Real_{}_N2N_FNet_ME_deconv_DetaAtte_W_JS_V_noisy_valvar_time_{}'.format(feature_mode,
         f"{datetime.datetime.now():%m-%d-%H-%M-%S}")
@@ -222,20 +223,19 @@ def train(args):
 
 
     ################## load Models 
-    checkpoint_path = 'pretrained_Fnet.pth.tar'
+    checkpoint_path = 'pretrained_Fnet.pth.tar'  
     checkpoint = torch.load(checkpoint_path)
     print(torch.cuda.is_available())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(device)
-    Decoder = DecoderNet(in_dim=1+nb_mode*num_features).float().to(device)
 
-
-    Encoder = EncoderNet(in_dim=2,conv_dim=64, out_dim=num_features, num_blocks=num_blocks).float().to(device)
+    Decoder = DecoderNet(in_dim=1+nb_mode*num_features).float().to(device)  # The "1" corresponds to the Bilinear Weight tensor after the splatting
+    Encoder = EncoderNet(in_dim=2,conv_dim=64, out_dim=num_features, num_blocks=num_blocks).float().to(device) #In_dim = 2 because we concatenate the original LR to the "Detail" as input
     Fnet = FNet().float().to(device)
-    Fnet.load_state_dict(checkpoint['state_dictFnet']) 
+    Fnet.load_state_dict(checkpoint['state_dictFnet']) #Load the pretrained Fnet
     
 
-    optimizerFnet = torch.optim.Adam(Fnet.parameters(), lr = lr_fnet)
+    optimizerFnet = torch.optim.Adam(Fnet.parameters(), lr = lr_fnet)   
     optimizerDecoder = torch.optim.Adam(Decoder.parameters(), lr = lr_decoder)
     optimizerEncoder = torch.optim.Adam(Encoder.parameters(), lr = lr_encoder)
 
@@ -246,18 +246,19 @@ def train(args):
     schedulerEncoder = torch.optim.lr_scheduler.StepLR(optimizerEncoder, step_size=patience_encoder, 
                                                      gamma=factor_encoder)
 
-    blur_filter_SR = BlurLayer().to(device)
+    blur_filter_SR = BlurLayer().to(device) # blur kernel for the output (to produce a sharp output directly)
 
-    gaussian_filter = GaussianBlur(11, sigma=1).to(device)
+    gaussian_filter = GaussianBlur(11, sigma=1).to(device) # For the base-detail decomposition
 
-    TVLoss = TVL1(TVLoss_weight=1)
-    warping = WarpedLoss(interpolation = 'bicubicTorch') 
+    TVLoss = TVL1(TVLoss_weight=1) 
+    warping = WarpedLoss(interpolation = 'bicubicTorch') # To compute the Fnet Loss
     ##################
     
-    Dataset_path = 'SkySat_ME_noSaturation/'
+    Dataset_path = 'SkySat_ME_noSaturation/' #Make sure to preprocess the downloaded data first
     train_loader = {}
     val_loader = {}
     
+    #For each sequence length (i = 5 to 15), we have a corresponding train loader
     for i in range(5,16):
         transformedDataset = SkySatRealDataset_ME(Dataset_path, augmentation = True, phase = 'train', num_images = i)
         train_loader[str(i)] = torch.utils.data.DataLoader(transformedDataset, batch_size=train_bs, 
@@ -286,7 +287,7 @@ def train(args):
         ValWarpLoss = []
         ValTVLoss = []
 
-        num_images = random.sample(range(4,16), 1)[0]
+        num_images = random.sample(range(4,16), 1)[0] 
         
         n = random.sample(range(num_images,16), 1)[0]
 
@@ -303,37 +304,36 @@ def train(args):
             optimizerEncoder.zero_grad()
 
             idx = random.sample(range(n), num_images)
+            # Randomly sample "num_images" frames from "n"-length train loader.
             
             samplesLR = samplesLR[:, idx].float().to(device)
   
             b, num_im, h, w = samplesLR.shape
             
             expotime = expotime[:, idx].float().to(device)
-            #samplesLR = samplesLR/expotime
         
             base, detail = base_detail_decomp(samplesLR/expotime, gaussian_filter) #b, 1, h, w 
             
-            #######Flow
-            flow, trainwarploss = flowEstimation(samplesLR*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im), 2, h, w
+            ####### Flow estimation + Warping loss
+            flow, trainwarploss = flowEstimation(samplesLR/expotime*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im), 2, h, w
             
             c = 5
-            traintvloss = TVLoss(flow[...,c:-c,c:-c])
+            traintvloss = TVLoss(flow[...,c:-c,c:-c]) # Smooth flow
 
             TrainWarpLoss.append(trainwarploss.data.item())
             TrainTVLoss.append(traintvloss.data.item())
 
-            random_shifts = torch.randint(low=0, high=2, size= (b,1,2,1,1))/2.
+            random_shifts = torch.randint(low=0, high=2, size= (b,1,2,1,1))/2. # Grid shifting 
             flow = flow - random_shifts.to(device)
 
             SR1 = DeepSaaSuperresolve_weighted_base(detail, flow=flow, base = samplesLR, Encoder=Encoder, Decoder =Decoder, 
                                       device = device, feature_mode = feature_mode, num_features = num_features, sr_ratio=sr_ratio, phase = 'training')
             
             ################## Register SR            
-            SR1 = blur_filter_SR(SR1)
-            #SR1 = torch.squeeze(SR1, 1)
+            SR1 = blur_filter_SR(SR1) # filtered output
             
-            #SR1_ds = SR1[...,::2,::2] 
-            SR1_ds = BicubicWarping(SR1.view(-1,1,2*h,2*w), flow[:,:1].view(-1,2,h,w), device)
+            #SR1_ds = SR1[...,::2,::2] if w/o grid shifting
+            SR1_ds = BicubicWarping(SR1.view(-1,1,2*h,2*w), flow[:,:1].view(-1,2,h,w), device) # To align the SR with the reference frame before downsampling
             SR1_ds = SR1_ds.view(b,1,h,w)
 
             N2Nloss = criterion(SR1_ds[:, :1, c:-c, c:-c], detail[:,:1,c:-c,c:-c])
@@ -358,7 +358,7 @@ def train(args):
         Encoder.eval()
 
         with torch.no_grad():
-            for n in range(8,9):
+            for n in range(8,9): # 
                 for k, (samplesLR, expotime) in enumerate(val_loader[str(n)]):
 
                     samplesLR = samplesLR.float().to(device)
@@ -366,9 +366,8 @@ def train(args):
                     b, num_im, h, w = samplesLR.shape
                     expotime = expotime.float().to(device)
 
-                    #samplesLR = samplesLR/expotime
                     #######Flow
-                    flow, valwarploss = flowEstimation(samplesLR*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im-1), 2, h, w
+                    flow, valwarploss = flowEstimation(samplesLR/expotime*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im-1), 2, h, w
 
                     c = 5
                     valtvloss = TVLoss(flow[...,c:-c,c:-c])

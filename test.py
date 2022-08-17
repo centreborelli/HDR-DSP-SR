@@ -225,9 +225,8 @@ def test(args):
                 b, num_im, h, w = samplesLR.shape
                 expotime = expotime.float().to(device)
 
-                #samplesLR = samplesLR/expotime
                 #######Flow
-                flow, valwarploss = flowEstimation(samplesLR*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im-1), 2, h, w
+                flow, valwarploss = flowEstimation(samplesLR/expotime*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im-1), 2, h, w
 
                 c = 5
 
