@@ -10,7 +10,13 @@
 
 ### Training
 
-`python train.py`
+The command 
+
+```python train.py```
+
+launches the training the HDR-DSP super-resolution network (see `train.py` file for more options). It requires pre-trained weights for the motion estimation sub-network stored in a file  `pretrained_Fnet.pth.tar`. We provide our pre-trained weights, but if you want to train it yourself you can do it with the command:
+
+```python train_FNet.py```
 
 ### Testing
 
