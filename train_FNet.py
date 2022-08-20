@@ -8,11 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np 
 from torch.utils.data import Dataset, DataLoader
 
-import scipy
 import os
-import iio
 import datetime
-from tensorboardX import SummaryWriter
 
 from models import FNet
 from warpingOperator import *
@@ -112,7 +109,6 @@ def train():
         f"{datetime.datetime.now():%m-%d-%H-%M-%S}")
     logdir = os.path.join('runs', folder_name)
 
-    tb = SummaryWriter(logdir)
     
     ##################
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -192,8 +188,7 @@ def train():
             
             del coupleImages, coupleImagesblur, flow
 
-        tb.add_scalar('Train/WarpLoss', mean(TrainWarpLoss), epoch)
-        tb.add_scalar('Train/TVFlowLoss', mean(TrainTVLoss), epoch)
+
         
         Fnet.eval()
         with torch.no_grad():
@@ -223,8 +218,7 @@ def train():
 
         scheduler.step(mean(TrainLoss))
 
-        tb.add_scalar('Val/WarpLoss', mean(ValWarpLoss), epoch)
-        tb.add_scalar('Val/TVFlowLoss', mean(ValTVLoss), epoch)
+
 
         if  epoch >= 100 and mean(ValLoss)< bestscore:
             print('############## Saving Models ... ##############')
@@ -247,7 +241,6 @@ def train():
             print('x100 ValLoss   = WarpLoss + TVFlow: {:.5f} = {:.5f} + {}*{:.5f}'.format(
                 100*mean(ValLoss), 100*mean(ValWarpLoss), TVLoss_weight, 100*mean(ValTVLoss)))
 
-    tb.close()
     
     print('Execution time = {:.0f}s'.format(time.time() - starttime))
     return 
