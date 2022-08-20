@@ -5,7 +5,14 @@
 ### Quick start
 
 1. Install pytorch and torchvision
+
+`conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch`
+
 2. Download the SkySat multi-exposure data [here](https://github.com/centreborelli/HDR-DSP-SR/releases/download/v1/hdr-dsp-real-dataset.zip).
+
+`wget https://github.com/centreborelli/HDR-DSP-SR/releases/download/v1/hdr-dsp-real-dataset.zip`
+`unzip hdr-dsp-real-dataset.zip`
+
 3. Preprocess the data using the notebook RemoveSaturation.ipynb to remove saturated frames and to categorize sequences by their length.
 
 ### Training
