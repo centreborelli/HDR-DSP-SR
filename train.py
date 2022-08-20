@@ -1,18 +1,14 @@
 """ Python script to train option J """
-import scipy
 import datetime
 import random
 import numpy as np
 import matplotlib.pyplot as plt
 import os
 import argparse
-#import iio
 from tqdm import tqdm
 from time import time
-from tensorboardX import SummaryWriter
 
 from numpy import mean
-from scipy import signal
 from torch.utils.data import Dataset, DataLoader
 import torch 
 import torch.nn as nn
@@ -24,7 +20,6 @@ from models import EncoderNet, DecoderNet, FNet
 from shiftandadd import shiftAndAdd, featureAdd, featureWeight
 
 from warpingOperator import WarpedLoss, TVL1, base_detail_decomp, BlurLayer
-import iio
 import os
 from torch.autograd import Variable
 
@@ -394,9 +389,6 @@ def train(args):
                     #valloss = N2Nloss
                     ValLoss.append(valloss.data.item())
                     
-                    if k == 0 and epoch%10==0:
-                        SR = SR.detach().cpu().numpy().squeeze()
-                        iio.write('Test/SR_{}.tif'.format(epoch), SR)
 
 
 

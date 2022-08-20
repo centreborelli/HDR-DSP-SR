@@ -213,7 +213,6 @@ def test(args):
     Decoder.eval()
     Encoder.eval()
 
-    #safe_mkdir("Results")
     with torch.no_grad():
         for n in range(4,16):
             savepath = "Results/{}".format(n)
@@ -226,15 +225,15 @@ def test(args):
                 expotime = expotime.float().to(device)
 
                 #######Flow
-                flow, valwarploss = flowEstimation(samplesLR/expotime*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) #b*(num_im-1), 2, h, w
-
-                c = 5
+                flow, valwarploss = flowEstimation(samplesLR/expotime*3.4, ME=Fnet, gaussian_filter = gaussian_filter, warping = warping, device=device) 
 
                 base, detail = base_detail_decomp(samplesLR/expotime, gaussian_filter) 
 
+                # SR for the detail
                 SR_detail = DeepSaaSuperresolve_weighted_base(detail, flow=flow, base = samplesLR, Encoder=Encoder, Decoder=Decoder,
                                         device = device, feature_mode= feature_mode, num_features = num_features, sr_ratio=sr_ratio, phase = 'validation')
 
+                # SR for the base
                 SR_base = zoombase_weighted(base, expotime, flow, device, warping)
 
                 SR = SR_base + SR_detail

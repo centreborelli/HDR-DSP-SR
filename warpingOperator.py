@@ -3,8 +3,6 @@ import torch
 import torch.nn as nn
 
 import numpy as np 
-import scipy
-from scipy.ndimage.morphology import binary_dilation
 from torch.autograd import Variable
 from torchvision.transforms import GaussianBlur
 
@@ -20,6 +18,8 @@ def base_detail_decomp(samples, gaussian_filter):
 class BlurLayer(nn.Module):
     def __init__(self):
         super(BlurLayer, self).__init__()
+        k = np.load('blur_kernel.npy').squeeze()
+        size = k.shape[0]
         self.seq = nn.Sequential(
             nn.ReflectionPad2d(size//2), 
             nn.Conv2d(1, 1, size, stride=1, padding=0, bias=None, groups=1)
@@ -36,26 +36,6 @@ class BlurLayer(nn.Module):
             f.data.copy_(torch.from_numpy(k))
             f.required_grad = False
 
-class GaussianLayer(nn.Module):
-    def __init__(self, sigma=1):
-        super(GaussianLayer, self).__init__()
-        self.seq = nn.Sequential(
-            nn.ReflectionPad2d(5), 
-            nn.Conv2d(1, 1, 11, stride=1, padding=0, bias=None, groups=1)
-        )
-
-        self.sigma = sigma
-        self.weights_init()
-    def forward(self, x):
-        return self.seq(x)
-
-    def weights_init(self):
-        n= np.zeros((11,11))
-        n[5,5] = 1
-        k = scipy.ndimage.gaussian_filter(n,sigma=self.sigma)
-        for name, f in self.named_parameters():
-            f.data.copy_(torch.from_numpy(k))
-            f.required_grad = False
 
 Gaussian_Filter = GaussianBlur(11, sigma=1).to(device)
 
