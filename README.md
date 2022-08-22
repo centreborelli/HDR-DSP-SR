@@ -33,6 +33,6 @@ launches the training the HDR-DSP super-resolution network (see `train.py` file 
 
 If you use this code please cite the following papers:
 
-*<span style="color:red">Self-supervised super-resolution for multi-exposure push-frame satellites</span>*, Ngoc Long Nguyen, Jérémy Anger, Axel Davy, Pablo Arias, Gabriele Facciolo; Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2022.
+<span style="color:red">*Self-supervised super-resolution for multi-exposure push-frame satellites*</span>, Ngoc Long Nguyen, Jérémy Anger, Axel Davy, Pablo Arias, Gabriele Facciolo; Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2022.
 
 Self-Supervised Multi-Image Super-Resolution for Push-Frame Satellite Images, Ngoc Long Nguyen, Jeremy Anger, Axel Davy, Pablo Arias, Gabriele Facciolo; Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops, 2021.
