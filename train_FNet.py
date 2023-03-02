@@ -188,6 +188,7 @@ def train():
             
             del coupleImages, coupleImagesblur, flow
 
+
         
         Fnet.eval()
         with torch.no_grad():
@@ -216,6 +217,7 @@ def train():
                 del coupleImages, coupleImagesblur, flow
 
         scheduler.step(mean(TrainLoss))
+
 
 
         if  epoch >= 100 and mean(ValLoss)< bestscore:

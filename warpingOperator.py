@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 
 import numpy as np 
+
 from torch.autograd import Variable
 from torchvision.transforms import GaussianBlur
 
@@ -14,12 +15,12 @@ def base_detail_decomp(samples, gaussian_filter):
     detail = samples - base
     return base, detail #b, num_im, h, w
 
+k = np.load('blur_kernel.npy').squeeze()
+size = k.shape[0]
 
 class BlurLayer(nn.Module):
     def __init__(self):
         super(BlurLayer, self).__init__()
-        k = np.load('blur_kernel.npy').squeeze()
-        size = k.shape[0]
         self.seq = nn.Sequential(
             nn.ReflectionPad2d(size//2), 
             nn.Conv2d(1, 1, size, stride=1, padding=0, bias=None, groups=1)
@@ -30,12 +31,9 @@ class BlurLayer(nn.Module):
         return self.seq(x)
 
     def weights_init(self):
-        k = np.load('blur_kernel.npy').squeeze()
-        size = k.shape[0]
         for name, f in self.named_parameters():
             f.data.copy_(torch.from_numpy(k))
             f.required_grad = False
-
 
 Gaussian_Filter = GaussianBlur(11, sigma=1).to(device)
 
